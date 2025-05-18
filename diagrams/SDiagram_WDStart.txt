@@ -1,0 +1,101 @@
+title WDStart
+
+
+entryspacing 1.5
+participantgroup #lightgreen
+participant Client_App
+participant Client_Thread
+end
+
+
+participantgroup #lightpink
+participant WD_Thread
+
+participant WD_App
+end
+
+
+activate Client_App
+
+Client_App->Client_App:WDStart  
+
+
+Client_App->Client_App:init_local_sem
+Client_App->Client_App:InitWDComponents
+Client_App->Client_App:HandleRevive 
+box over Client_App://HandleRevive\nThis function revives the partner\nexecutable if needed and manages\nthe necessary parameters\na process requires. \nRefer to the Revive Diagram \nfor detailed flow.//
+
+create WD_App
+activate WD_App
+WD_App->WD_App:WD_start
+WD_App->WD_App:init_local_sem
+WD_App->WD_App:InitWDComponents
+WD_App->WD_App:HandleRevive
+
+
+alt if InitWDComponent failed OR Revive failed 
+Client_App->Client_App:CleanComponents
+Client_App->Client_App:destroy_local_sem
+destroy Client_App
+end
+
+create Client_Thread
+
+Client_Thread<-Client_App:pthread_create
+alt if FAIL
+Client_App<-Client_Thread:CleanUp
+destroyafter Client_App
+
+
+end
+activate Client_Thread
+Client_App<-Client_App:sem_wait(local)
+Client_Thread->Client_Thread:Sched_Create
+Client_Thread->Client_Thread:AddTask ImAlive signal
+box over Client_Thread://ImAlive task sends a signal \nto its partner to indicate\nit's alive, which resets the\npartner's counter.//
+Client_Thread->Client_Thread:AddTask AreYouAlive
+box over Client_Thread://AreYouAlive task checks \nif the counter exceeds the\nthreshold and revives the \npartner if necessary//
+Client_Thread->Client_Thread:sem_wait(Client)
+deactivateafter Client_Thread 
+
+
+activate WD_Thread
+
+
+WD_App->WD_Thread:pthread_create
+WD_App->WD_App:sem_wait(local)
+>WD_Thread:Sched_Create
+WD_Thread->WD_Thread:Sched_create
+WD_Thread->WD_Thread:AddTask ImAlive signal
+WD_Thread->WD_Thread:AddTask AreYouAlive
+WD_Thread->Client_Thread:sem_post(Client)
+activate Client_Thread
+Client_Thread->WD_Thread:sem_post(WD)
+Client_Thread->Client_Thread:sem_post(local)
+Client_Thread->Client_Thread:SchedRun
+WD_Thread->WD_Thread:sem_wait(WD)
+
+
+
+WD_Thread->WD_Thread:sem_post(local)
+WD_Thread->WD_Thread:SchedRun
+loop Till client call WDStop
+WD_Thread->Client_Thread:sig1
+Client_Thread->Client_Thread:reset_counter
+Client_Thread->WD_Thread:sig1
+WD_Thread->WD_Thread:reset_counter
+alt if (sig 1 has failed to send to its partner above the threshold we call revive with berrier 
+Client_Thread->WD_App:kill
+Client_Thread->Client_Thread:reset_counter
+
+
+Client_Thread->WD_App:HandleRevive
+==This happening ViceVersa==
+end
+
+end
+
+
+
+
+
